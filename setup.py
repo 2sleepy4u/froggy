@@ -10,7 +10,7 @@ setup(
     license='BSD 2-clause',
     packages=['froggy'],
     package_data={
-        'froggy': ['/images/*.png'],
+        'froggy': ['/images/frog.png'],
     },
     install_requires=[ "PyQt5"
                       , "randfacts"

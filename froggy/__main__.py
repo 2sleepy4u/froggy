@@ -4,10 +4,10 @@ from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt, QPoint, QTimer, QThread, QPropertyAnimation, QEasingCurve, QTimer
 import randfacts
 import ollama
+import pkg_resources
 
 stylesheet = "color: white; font-size: 15px; background-color: rgba(0, 0, 0, 180); border-radius: 15px;   padding: 10px;   border: 2px solid white;  "
-frog_png = "./froggy/images/frog.png"
-
+frog_png = pkg_resources.resource_filename('froggy', 'images/frog.png')
 class AThread(QThread):
     def __init__(self, parent, text) -> None:
         super().__init__(parent=parent)
