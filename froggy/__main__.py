@@ -1,13 +1,14 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget, QSizePolicy, QMenu, QAction, QSystemTrayIcon, QLineEdit
+from PyQt5.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget, QSizePolicy, QMenu, QAction, QSystemTrayIcon, QLineEdit, QScrollArea
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt, QPoint, QTimer, QThread, QPropertyAnimation, QEasingCurve, QTimer
 import randfacts
 import ollama
-import pkg_resources
+from importlib.resources import files
 
 stylesheet = "color: white; font-size: 15px; background-color: rgba(0, 0, 0, 180); border-radius: 15px;   padding: 10px;   border: 2px solid white;  "
-frog_png = pkg_resources.resource_filename('froggy', 'images/frog.png')
+frog_png = str(files('froggy').joinpath('images/frog.png'))
+
 class AThread(QThread):
     def __init__(self, parent, text) -> None:
         super().__init__(parent=parent)
@@ -27,14 +28,81 @@ class AThread(QThread):
         except Exception:
             self.answer = "I'm not able to connect to the mighty llama."
 
-    
-class SpeechWidget(QLabel):
+
+class SpeechWidget(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        
+        # Create a QLabel with long text content
+        self.label = QLabel()
+        self.label.setText("")  # Long text to show scrolling
+        self.label.setWordWrap(True)  # Wrap the text within the label's width
+        self.label.setStyleSheet("background-color: rgba(0,0,0,0); border: none;") 
+        self.label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  
+
+        # Set a fixed size for the label
+        self.label.setFixedSize(290, 200)
+
+        # Create a QScrollArea
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidget(self.label)
+        self.scroll_area.setWidgetResizable(True)  # To ensure the content can be resized properly
+        self.scroll_area.setFixedSize(300, 200)  # Set fixed size for scroll area itself
+        self.scroll_area.setStyleSheet("""
+            * { 
+                color: white;
+                font-size: 15px; 
+                padding: 10px;   
+            }
+            QScrollArea {
+                background-color: rgba(0, 0, 0, 180); 
+                border-radius: 15px;   
+                padding: 10px;   
+                border: 2px solid white;
+            }
+            QScrollBar:vertical {
+                width: 0px;
+            }
+        """) 
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # Disable horizontal scroll
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        # Set up the layout and add the scroll area
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(self.scroll_area)
+        self.setLayout(self.layout)
+
+    def show_ribbit(self, text, duration = 5000):
+        self.scroll_area.setFixedHeight(200)
+        self.label.setText(text)
+        
+        QTimer.singleShot(duration, self.clear_ribbit)  
+
+    def clear_ribbit(self):
+        self.label.setText("")
+        self.scroll_area.setFixedHeight(0)
+
+class _SpeechWidget(QLabel):
     def __init__(self) -> None:
         super().__init__()
         self.setWordWrap(True)
         self.setStyleSheet("color: white; font-size: 15px;")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  
         self.setAlignment(Qt.AlignTop)
+
+    def show_ribbit(self, text, duration = 5000, ribbit = True):
+        text = text + "\nRibbit!" if ribbit else ""
+        self.setText(text)
+        self.setStyleSheet(stylesheet)
+        self.adjustSize()
+        
+        QTimer.singleShot(duration, self.clear_ribbit)  
+
+    def clear_ribbit(self):
+        self.setText("")
+        self.setStyleSheet("color: white; font-size: 15px;") 
+
+
 
 class PromptWidget(QLineEdit):
     def __init__(self) -> None:
@@ -59,6 +127,7 @@ class FrogWidget(QLabel):
         super().__init__()
         self.setPixmap(QPixmap(frog_png))  
         self.setFixedSize(self.pixmap().size())
+        self.setAlignment(Qt.AlignBottom)
 
 class ReminderWidget(QTimer):
     def __init__(self, text = "", interval = 1000) -> None:
@@ -108,12 +177,12 @@ class MainWidget(QWidget):
         self.layout.addWidget(self.text_edit)
         self.layout.addWidget(self.frog_label)
              
-        self.setFixedSize(self.frog_label.width() + 200, self.frog_label.height() + 200)  
+        self.setFixedSize(self.frog_label.width() + 210, self.frog_label.height() + 300)  
 
         screen_geometry = QApplication.desktop().availableGeometry()
         self.move(0, screen_geometry.height() - self.height())
 
-        self.reminder = ReminderManager(lambda x: self.show_ribbit(x, 2000))
+        self.reminder = ReminderManager(lambda x: self.ribbit_label.show_ribbit(x, 2000))
         self.reminder.add(ReminderWidget("It's time to take a break!", 1000 * 60 * 60))
         self.reminder.start()
 
@@ -122,6 +191,9 @@ class MainWidget(QWidget):
         self.animation.setEasingCurve(QEasingCurve.InOutQuad)
         self.animation.setDuration(300)  # Duration of 1 second per pulse (up/down)
         self.animation.setLoopCount(-1)  # Loop indefinitely until stopped
+
+        self.ribbit_label.show_ribbit("Right click on me to view the menu. \nDouble click on me to get a random fun fact!")
+
 
     def startThinkingAnimation(self):
         # Set the animation geometry to "pulse" the frog (scaling effect)
@@ -160,7 +232,7 @@ class MainWidget(QWidget):
 
     def send_text(self):
         if self.answer_thread is not None and not self.answer_thread.isFinished():
-            return self.show_ribbit("Wait... I'm thinking...")
+            return self.ribbit_label.show_ribbit("Wait... I'm thinking...")
 
         self.text_edit.hide()
         text = self.text_edit.text()
@@ -186,29 +258,15 @@ class MainWidget(QWidget):
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
             text = randfacts.get_fact()
-            self.show_ribbit(text)
+            self.ribbit_label.show_ribbit(text)
 
     def do_answer(self):
         if self.answer_thread is not None:
             answer = self.answer_thread.answer
             #calculate how many seconds for a reading speed of 130 words per minute
             ms = int(1000 * 60 * len(answer.split()) / 130)
-            self.show_ribbit(answer, ms)
+            self.ribbit_label.show_ribbit(answer, ms)
         self.stopThinkingAnimation()
-
-
-    def show_ribbit(self, text, duration = 5000, ribbit = True):
-        text = text + "\nRibbit!" if ribbit else ""
-        self.ribbit_label.setText(text)
-        self.ribbit_label.setStyleSheet(stylesheet)
-        self.ribbit_label.adjustSize()
-        
-        QTimer.singleShot(duration, self.clear_ribbit)  
-
-    def clear_ribbit(self):
-        self.ribbit_label.setText("")
-        self.ribbit_label.setStyleSheet("color: white; font-size: 15px;") 
-
 
 class FroggyApp(QApplication):
     def __init__(self) -> None:
